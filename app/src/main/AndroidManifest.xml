@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <!-- 1. ADDED: Internet Permission -->
+    <uses-permission android:name="android.permission.INTERNET" /> <!-- 2. ADDED: Location Permissions -->
+    <!-- Required for apps targeting API 22 or lower, and for getting precise location -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" /> <!-- Required for getting approximate location using Wi-Fi and cell towers -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <application
         android:allowBackup="true"
@@ -11,6 +16,17 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.ShambaLetu">
+        <activity
+            android:name=".MapMeasurementActivity"
+            android:exported="false" />
+        <!--
+            ADDED: The correct way to add the Google Maps API key.
+            This tag must be inside the <application> tag.
+        -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="@string/google_maps_key" />
+
         <activity
             android:name=".loginpage"
             android:exported="false" />
