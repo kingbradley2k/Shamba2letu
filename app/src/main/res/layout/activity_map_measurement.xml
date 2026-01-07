@@ -8,6 +8,7 @@
     tools:context=".MapMeasurementActivity">
 
     <!-- Google Map -->
+
     <fragment
         android:id="@+id/map"
         android:name="com.google.android.gms.maps.SupportMapFragment"

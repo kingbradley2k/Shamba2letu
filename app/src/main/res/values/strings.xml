@@ -10,8 +10,8 @@
     <string name="already_have_an_account_login">Already have an Account ? Login</string>
     <string name="login">LOGIN</string>
     <string name="dont_have_an_account_sign_up">Dont have an account? Sign up</string>
-    <string name="latitude">Latitude: -</string>
-    <string name="longitude">Longitude: -</string>
+    <string name="latitude">Latitude: 0.000000-</string>
+    <string name="longitude">Longitude: 0.000000</string>
     <string name="distance_0_m">Distance: 0 m</string>
     <string name="area_0_m">Area: 0 m²</string>
     <string name="gps_searching">GPS: Searching...</string>
