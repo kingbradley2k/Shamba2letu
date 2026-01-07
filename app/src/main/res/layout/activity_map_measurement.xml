@@ -7,7 +7,6 @@
     android:layout_height="match_parent"
     tools:context=".MapMeasurementActivity">
 
-    <!-- Google Map -->
 
     <fragment
         android:id="@+id/map"
