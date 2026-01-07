@@ -4,10 +4,16 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
+import android.widget.EditText;
+import android.widget.Button;
 
 import androidx.appcompat.app.AppCompatActivity;
 
 public class loginpage extends AppCompatActivity {
+
+    EditText edtEmail;
+    EditText edtPassword;
+    Button loginButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -16,6 +22,9 @@ public class loginpage extends AppCompatActivity {
 
         // Find the TextView by its correct ID
         TextView registerLink = findViewById(R.id.signuplink);
+        edtEmail = findViewById(R.id.edtEmail);
+        edtPassword = findViewById(R.id.edtPassword);
+        loginButton = findViewById(R.id.loginbtn);
 
         // Set a click listener on the TextView
         registerLink.setOnClickListener(new View.OnClickListener() {
@@ -26,5 +35,17 @@ public class loginpage extends AppCompatActivity {
                 startActivity(intent);
             }
         });
+
+        // Set a click listener on the login button
+               loginButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // Create an Intent to start the registration activity
+                //this part was temporary modified to direct users to the dashboard page but in due time we need to change
+                Intent intent = new Intent(loginpage.this, MapMeasurementActivity.class);
+                startActivity(intent);
+            }
+        });
     }
+
 }

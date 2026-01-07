@@ -7,8 +7,9 @@
     android:layout_height="match_parent"
     tools:context=".loginpage"
     android:background="@drawable/background_image">
+
     <TextView
-         android:id="@+id/logintext"
+         android:id="@+id/Edtlogintext"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/login"
@@ -19,8 +20,9 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"/>
+
     <EditText
-        android:id="@+id/email22"
+        android:id="@+id/edtEmail"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="32dp"
@@ -34,9 +36,10 @@
         android:textColorHint="@color/white"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/logintext"/>
+        app:layout_constraintTop_toBottomOf="@id/Edtlogintext"/>
+
     <EditText
-        android:id="@+id/password22"
+        android:id="@+id/edtPassword"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="32dp"
@@ -50,7 +53,8 @@
         android:textColorHint="@color/white"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/email22"/>
+        app:layout_constraintTop_toBottomOf="@id/edtEmail"/>
+
     <Button
         android:id="@+id/loginbtn"
         android:layout_width="wrap_content"
@@ -61,7 +65,8 @@
         android:textSize="24sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/password22"/>
+        app:layout_constraintTop_toBottomOf="@id/edtPassword"/>
+
     <TextView
         android:id="@+id/signuplink"
         android:layout_width="wrap_content"
