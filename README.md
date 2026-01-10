@@ -1,2 +1,2 @@
 # Shamba2letu
-primary work 
+refer to the readme on the master branch 
