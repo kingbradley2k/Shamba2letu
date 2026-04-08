@@ -1,6 +1,8 @@
 package com.example.shambaletu;
 
 import android.Manifest;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.hardware.Sensor;
@@ -12,10 +14,12 @@ import android.location.Location;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -28,7 +32,12 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.net.Uri;
 import android.widget.EditText;
+
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.ActionBarDrawerToggle;
+import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
+
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.model.LatLng;
 import java.io.OutputStream;
@@ -40,10 +49,15 @@ import androidx.core.content.ContextCompat;
 import com.google.android.gms.location.*;
 import com.google.android.gms.maps.*;
 import com.google.android.gms.maps.model.*;
+import com.google.android.material.navigation.NavigationView;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.google.maps.android.SphericalUtil;
+
+import java.lang.reflect.Type;
 import java.util.*;
 
-public class MapMeasurementActivity extends AppCompatActivity implements OnMapReadyCallback {
+public class MapMeasurementActivity extends AppCompatActivity implements OnMapReadyCallback, NavigationView.OnNavigationItemSelectedListener {
 
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1001;
     private static final float MIN_ACCURACY_METERS = 5f;
@@ -82,6 +96,10 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
     private LatLng activeMeasurePosition;
     private boolean isManualLock = false;
     private Circle accuracyCircle;
+
+    private DrawerLayout drawerLayout;
+    private NavigationView navigationView;
+    private ImageButton btnMenu;
 
     private enum PlacementMode {
         GPS("GPS", Color.GREEN),
@@ -200,6 +218,14 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_map_measurement);
+
+        drawerLayout = findViewById(R.id.drawer_layout);
+        navigationView = findViewById(R.id.nav_view);
+        btnMenu = findViewById(R.id.btnMenu);
+
+        navigationView.setNavigationItemSelectedListener(this);
+        btnMenu.setOnClickListener(v -> drawerLayout.openDrawer(GravityCompat.START));
+
         checkGpsStatus();
         initViews();
         setupSpinner();
@@ -208,6 +234,38 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
         setupLocation();
         setupButtons();
         setupGnssStatus();
+    }
+
+    @Override
+    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
+        int id = item.getItemId();
+
+        if (id == R.id.nav_new_measurement) {
+            clearAll();
+        } else if (id == R.id.nav_saved_projects) {
+            Intent intent = new Intent(this, SavedProjectsActivity.class);
+            startActivity(intent);
+        } else if (id == R.id.nav_export) {
+            Toast.makeText(this, "Go to 'Saved Projects' to export data", Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.nav_settings) {
+            Toast.makeText(this, "Opening Settings...", Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.nav_logout) {
+            Intent intent = new Intent(this, loginpage.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+        }
+
+        drawerLayout.closeDrawer(GravityCompat.START);
+        return true;
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            drawerLayout.closeDrawer(GravityCompat.START);
+        } else {
+            super.onBackPressed();
+        }
     }
 
     private void checkGpsStatus() {
@@ -330,7 +388,7 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
         btnAddPoint.setOnClickListener(v -> addPoint());
         btnUndoPoint.setOnClickListener(v -> undoLast());
         btnClearMap.setOnClickListener(v -> clearAll());
-        btnSavePlot.setOnClickListener(v -> savePlot());
+        btnSavePlot.setOnClickListener(v -> saveProjectDialog());
         btnLockMarker.setOnClickListener(v -> toggleLock());
         if (btnToggleMode != null) {
             updateModeUI();
@@ -823,6 +881,58 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
             updateWalkingButtonText();
         }
         Toast.makeText(this, "All points cleared", Toast.LENGTH_SHORT).show();
+    }
+
+    private void saveProjectDialog() {
+        if (points.size() < 3) {
+            Toast.makeText(this, "You need at least 3 points to save a project.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Save Project");
+
+        final EditText input = new EditText(this);
+        input.setHint("Project Name");
+        builder.setView(input);
+
+        builder.setPositiveButton("Save", (dialog, which) -> {
+            String name = input.getText().toString().trim();
+            if (!name.isEmpty()) {
+                saveProject(name);
+            } else {
+                Toast.makeText(this, "Name cannot be empty.", Toast.LENGTH_SHORT).show();
+            }
+        });
+        builder.setNegativeButton("Cancel", null);
+        builder.show();
+    }
+
+    private void saveProject(String name) {
+        double perimeter = 0;
+        for (int i = 0; i < points.size() - 1; i++) {
+            perimeter += SphericalUtil.computeDistanceBetween(points.get(i), points.get(i + 1));
+        }
+        perimeter += SphericalUtil.computeDistanceBetween(points.get(points.size() - 1), points.get(0));
+        
+        double area = SphericalUtil.computeArea(points);
+        
+        // Convert to selected units
+        double perimeterConverted = perimeter / selectedUnit.toMeters;
+        double areaConverted = area / (selectedUnit.toMeters * selectedUnit.toMeters);
+
+        Project project = new Project(name, new ArrayList<>(points), areaConverted, perimeterConverted, selectedUnit.label, System.currentTimeMillis());
+
+        SharedPreferences prefs = getSharedPreferences(SavedProjectsActivity.PREFS_NAME, Context.MODE_PRIVATE);
+        String json = prefs.getString(SavedProjectsActivity.PROJECTS_KEY, "[]");
+        Gson gson = new Gson();
+        Type type = new TypeToken<ArrayList<Project>>() {}.getType();
+        List<Project> projectList = gson.fromJson(json, type);
+        
+        projectList.add(project);
+        
+        prefs.edit().putString(SavedProjectsActivity.PROJECTS_KEY, gson.toJson(projectList)).apply();
+        Toast.makeText(this, "Project saved successfully!", Toast.LENGTH_SHORT).show();
     }
 
     private void savePlot() {

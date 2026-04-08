@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_new_measurement"
+            android:icon="@android:drawable/ic_menu_add"
+            android:title="New Measurement" />
+        <item
+            android:id="@+id/nav_saved_projects"
+            android:icon="@android:drawable/ic_menu_save"
+            android:title="Saved Projects" />
+        <item
+            android:id="@+id/nav_export"
+            android:icon="@android:drawable/ic_menu_share"
+            android:title="Export Data" />
+    </group>
+    <item android:title="Communicate">
+        <menu>
+            <item
+                android:id="@+id/nav_settings"
+                android:icon="@android:drawable/ic_menu_preferences"
+                android:title="Settings" />
+            <item
+                android:id="@+id/nav_logout"
+                android:icon="@android:drawable/ic_lock_power_off"
+                android:title="Logout" />
+        </menu>
+    </item>
+</menu>

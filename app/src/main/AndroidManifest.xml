@@ -27,9 +27,15 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.ShambaLetu">
+        
+        <activity
+            android:name=".SavedProjectsActivity"
+            android:exported="false" />
+            
         <activity
             android:name=".MapMeasurementActivity"
             android:exported="false" />
+            
         <!--
             ADDED: The correct way to add the Google Maps API key.
             This tag must be inside the <application> tag.
