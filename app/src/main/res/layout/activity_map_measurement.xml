@@ -29,7 +29,7 @@
             android:id="@+id/infoPanel"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:background="#88000000"
+            android:background="?attr/panelBackgroundColor"
             android:orientation="vertical"
             android:padding="8dp"
             app:layout_constraintEnd_toEndOf="parent"
@@ -41,28 +41,28 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/latitude"
-                android:textColor="#FFFFFF" />
+                android:textColor="?attr/panelTextColor" />
 
             <TextView
                 android:id="@+id/tvLongitude"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/longitude"
-                android:textColor="#FFFFFF" />
+                android:textColor="?attr/panelTextColor" />
 
             <TextView
                 android:id="@+id/tvDistance"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/distance_0_m"
-                android:textColor="#FFFFFF" />
+                android:textColor="?attr/panelTextColor" />
 
             <TextView
                 android:id="@+id/tvArea"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/area_0_m"
-                android:textColor="#FFFFFF" />
+                android:textColor="?attr/panelTextColor" />
 
             <TextView
                 android:id="@+id/tvGpsStatus"
@@ -100,7 +100,8 @@
             android:layout_marginStart="4dp"
             android:layout_marginTop="8dp"
             android:layout_marginEnd="4dp"
-            android:backgroundTint="#88000000"
+            android:backgroundTint="?attr/panelBackgroundColor"
+            android:textColor="?attr/panelTextColor"
             android:ellipsize="end"
             android:gravity="center"
             android:maxLines="1"
@@ -121,7 +122,8 @@
             android:layout_marginStart="4dp"
             android:layout_marginTop="8dp"
             android:layout_marginEnd="8dp"
-            android:backgroundTint="#88000000"
+            android:backgroundTint="?attr/panelBackgroundColor"
+            android:textColor="?attr/panelTextColor"
             android:ellipsize="end"
             android:gravity="center"
             android:maxLines="1"
@@ -152,7 +154,7 @@
             android:layout_marginStart="8dp"
             android:layout_marginTop="8dp"
             android:layout_marginEnd="8dp"
-            android:background="#88000000"
+            android:background="?attr/panelBackgroundColor"
             android:gravity="center"
             android:orientation="horizontal"
             android:padding="8dp"
@@ -172,7 +174,7 @@
                 android:minWidth="80dp"
                 android:padding="4dp"
                 android:text="Bearing: --°"
-                android:textColor="#FFFFFF"
+                android:textColor="?attr/panelTextColor"
                 android:textSize="13sp" />
 
             <TextView
@@ -186,7 +188,7 @@
                 android:minWidth="80dp"
                 android:padding="4dp"
                 android:text="Satellites: --"
-                android:textColor="#FFFFFF"
+                android:textColor="?attr/panelTextColor"
                 android:textSize="13sp" />
 
             <TextView
@@ -200,7 +202,7 @@
                 android:minWidth="80dp"
                 android:padding="4dp"
                 android:text="Accuracy: --m"
-                android:textColor="#FFFFFF"
+                android:textColor="?attr/panelTextColor"
                 android:textSize="13sp" />
         </LinearLayout>
 
@@ -209,7 +211,7 @@
             android:id="@+id/controlPanel"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:background="#CCFFFFFF"
+            android:background="?attr/panelBackgroundColor"
             android:orientation="horizontal"
             android:padding="8dp"
             android:weightSum="4"
@@ -291,7 +293,8 @@
             android:layout_margin="16dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_menu"
-            app:layout_constraintStart_toStartOf="parent"
+            android:tint="?attr/panelTextColor"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             android:contentDescription="Open Menu" />
 
@@ -302,7 +305,7 @@
         android:id="@+id/nav_view"
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
-        android:layout_gravity="start"
+        android:layout_gravity="end"
         app:headerLayout="@layout/nav_header"
         app:menu="@menu/drawer_menu" />
 

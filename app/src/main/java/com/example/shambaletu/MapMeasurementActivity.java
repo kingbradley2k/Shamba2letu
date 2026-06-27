@@ -224,7 +224,8 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
         btnMenu = findViewById(R.id.btnMenu);
 
         navigationView.setNavigationItemSelectedListener(this);
-        btnMenu.setOnClickListener(v -> drawerLayout.openDrawer(GravityCompat.START));
+        // Updated to open from the RIGHT (END)
+        btnMenu.setOnClickListener(v -> drawerLayout.openDrawer(GravityCompat.END));
 
         checkGpsStatus();
         initViews();
@@ -255,14 +256,16 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
             startActivity(intent);
         }
 
-        drawerLayout.closeDrawer(GravityCompat.START);
+        // Updated to close the RIGHT drawer
+        drawerLayout.closeDrawer(GravityCompat.END);
         return true;
     }
 
     @Override
     public void onBackPressed() {
-        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
-            drawerLayout.closeDrawer(GravityCompat.START);
+        // Updated to check and close the RIGHT drawer
+        if (drawerLayout.isDrawerOpen(GravityCompat.END)) {
+            drawerLayout.closeDrawer(GravityCompat.END);
         } else {
             super.onBackPressed();
         }

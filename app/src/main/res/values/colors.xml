@@ -2,4 +2,18 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Primary Brand Colors -->
+    <color name="primary_green">#4CAF50</color>
+    <color name="primary_green_dark">#388E3C</color>
+
+    <!-- Light Theme Colors -->
+    <color name="light_background">#FEFFFD</color>
+    <color name="light_on_background">#1A1C18</color>
+    <color name="light_panel_bg">#CCFFFFFF</color>
+
+    <!-- Dark Theme Colors -->
+    <color name="dark_background">#1A1C18</color>
+    <color name="dark_on_background">#E3E3DC</color>
+    <color name="dark_panel_bg">#CC1A1C18</color>
 </resources>
