@@ -20,7 +20,8 @@
             app:title="Saved Projects"
             app:titleTextColor="?attr/colorOnPrimary"
             app:navigationIcon="@drawable/ic_arrow_back"
-            app:navigationIconTint="?attr/colorOnPrimary" />
+            app:navigationIconTint="?attr/colorOnPrimary"
+            app:menu="@menu/menu_saved_projects" />
 
     </com.google.android.material.appbar.AppBarLayout>
 

@@ -24,6 +24,7 @@ import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.appcompat.widget.PopupMenu;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
@@ -38,6 +39,8 @@ import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 
+import android.os.Handler;
+import android.os.Looper;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.model.LatLng;
 import java.io.OutputStream;
@@ -60,12 +63,19 @@ import java.util.*;
 public class MapMeasurementActivity extends AppCompatActivity implements OnMapReadyCallback, NavigationView.OnNavigationItemSelectedListener {
 
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1001;
-    private static final float MIN_ACCURACY_METERS = 5f;
+    private static final float ACCURACY_THRESHOLD_METERS = 10f;
+    private static final float HIGH_ACCURACY_THRESHOLD_METERS = 5f;
+    private static final long GPS_TIMEOUT_MS = 25000;
     private static final int STABLE_READINGS_REQUIRED = 3;
     private static final float MAX_SPEED_MPS = 0.2f;
     private static final int REQ_SAVE_IMAGE = 1002;
     private static final int MIN_SATELLITES = 6;
     private static final int READINGS_TO_COLLECT = 3;
+
+    private long startTimeMillis = 0;
+    private boolean isTimeoutExpired = false;
+    private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
+    private Runnable timeoutRunnable;
 
     private String pendingFileName = "Plot_Map.jpg";
     private Bitmap mapSnapshotBitmap;
@@ -129,7 +139,7 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
     private ProgressBar progressGps;
     private Spinner spinnerUnits;
     private Button btnAddPoint, btnUndoPoint, btnClearMap, btnSavePlot, btnLockMarker, btnToggleMode, btnToggleMapType;
-    private final List<LatLng> points = new ArrayList<>();
+    private final List<MeasuredPoint> points = new ArrayList<>();
     private Polyline currentPolyline;
     private Polygon currentPolygon;
 
@@ -235,6 +245,38 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
         setupLocation();
         setupButtons();
         setupGnssStatus();
+        startGpsTimeout();
+    }
+
+    private void startGpsTimeout() {
+        if (timeoutRunnable != null) timeoutHandler.removeCallbacks(timeoutRunnable);
+        startTimeMillis = System.currentTimeMillis();
+        isTimeoutExpired = false;
+        timeoutRunnable = () -> {
+            isTimeoutExpired = true;
+            if (!isGpsLocked) {
+                tvGpsStatus.setText("GPS signal weak (Timeout)");
+                tvGpsStatus.setTextColor(Color.RED);
+                if (currentMode == PlacementMode.GPS || currentMode == PlacementMode.WALKING) {
+                    btnAddPoint.setEnabled(true);
+                }
+            }
+        };
+        timeoutHandler.postDelayed(timeoutRunnable, GPS_TIMEOUT_MS);
+    }
+
+    private void lockGps(Location location) {
+        isGpsLocked = true;
+        if (timeoutRunnable != null) {
+            timeoutHandler.removeCallbacks(timeoutRunnable);
+        }
+        if (currentMode == PlacementMode.GPS || currentMode == PlacementMode.WALKING) {
+            btnAddPoint.setEnabled(true);
+        }
+        createMeasureMarker(location);
+        tvGpsStatus.setText("GPS LOCKED ✓");
+        tvGpsStatus.setTextColor(Color.GREEN);
+        progressGps.setProgress(100);
     }
 
     @Override
@@ -395,12 +437,33 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
         btnLockMarker.setOnClickListener(v -> toggleLock());
         if (btnToggleMode != null) {
             updateModeUI();
-            btnToggleMode.setOnClickListener(v -> togglePlacementMode());
+            btnToggleMode.setOnClickListener(this::showModePopupMenu);
         }
         if (btnToggleMapType != null) {
             btnToggleMapType.setText("Map: " + MAP_TYPE_NAMES[currentMapTypeIndex]);
             btnToggleMapType.setOnClickListener(v -> toggleMapType());
         }
+    }
+
+    private void showModePopupMenu(View view) {
+        PopupMenu popup = new PopupMenu(this, view);
+        for (PlacementMode mode : PlacementMode.values()) {
+            popup.getMenu().add(mode.label);
+        }
+
+        popup.setOnMenuItemClickListener(item -> {
+            String selectedLabel = item.getTitle().toString();
+            for (PlacementMode mode : PlacementMode.values()) {
+                if (mode.label.equals(selectedLabel)) {
+                    currentMode = mode;
+                    stepCount = 0;
+                    updateModeUI();
+                    return true;
+                }
+            }
+            return false;
+        });
+        popup.show();
     }
 
     private void toggleMapType() {
@@ -411,35 +474,18 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
         Toast.makeText(this, "Map Type: " + MAP_TYPE_NAMES[currentMapTypeIndex], Toast.LENGTH_SHORT).show();
     }
 
-    private void togglePlacementMode() {
-        switch (currentMode) {
-            case GPS:
-                currentMode = PlacementMode.WALKING;
-                stepCount = 0;
-                break;
-            case WALKING:
-                currentMode = PlacementMode.MANUAL;
-                stepCount = 0;
-                break;
-            case MANUAL:
-                currentMode = PlacementMode.GPS;
-                break;
-        }
-        updateModeUI();
-    }
-
     private void updateModeUI() {
         btnToggleMode.setText("Mode: " + currentMode.label);
         btnToggleMode.setBackgroundColor(currentMode.color);
         switch (currentMode) {
             case GPS:
-                btnAddPoint.setEnabled(isGpsLocked);
+                btnAddPoint.setEnabled(isGpsLocked || isTimeoutExpired);
                 btnAddPoint.setText("Add Point");
                 stepCount = 0;
                 Toast.makeText(this, "GPS mode: Tap 'Add Point' to place markers", Toast.LENGTH_SHORT).show();
                 break;
             case WALKING:
-                btnAddPoint.setEnabled(isGpsLocked);
+                btnAddPoint.setEnabled(isGpsLocked || isTimeoutExpired);
                 stepCount = 0;
                 updateWalkingButtonText();
                 Toast.makeText(this, "Walking mode: Walk and tap button to add points", Toast.LENGTH_LONG).show();
@@ -511,7 +557,7 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
                 if (marker.equals(measureMarker)) {
                     activeMeasurePosition = marker.getPosition();
                 } else if (selectedPointIndex >= 0 && selectedPointIndex < points.size()) {
-                    points.set(selectedPointIndex, marker.getPosition());
+                    points.set(selectedPointIndex, new MeasuredPoint(marker.getPosition().latitude, marker.getPosition().longitude, points.get(selectedPointIndex).isLowConfidence()));
                     updateMap();
                     updateMeasurements();
                 }
@@ -523,7 +569,7 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
                     activeMeasurePosition = marker.getPosition();
                     Toast.makeText(MapMeasurementActivity.this, "GPS cursor repositioned", Toast.LENGTH_SHORT).show();
                 } else if (selectedPointIndex >= 0 && selectedPointIndex < points.size()) {
-                    points.set(selectedPointIndex, marker.getPosition());
+                    points.set(selectedPointIndex, new MeasuredPoint(marker.getPosition().latitude, marker.getPosition().longitude, points.get(selectedPointIndex).isLowConfidence()));
                     updateMap();
                     updateMeasurements();
                     Toast.makeText(MapMeasurementActivity.this, "Point " + (selectedPointIndex + 1) + " adjusted", Toast.LENGTH_SHORT).show();
@@ -563,6 +609,15 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
             public void onLocationResult(@NonNull LocationResult result) {
                 currentLocation = result.getLastLocation();
                 if (currentLocation == null) return;
+
+                float accuracy = currentLocation.getAccuracy();
+
+                // Live status indicator
+                if (!isGpsLocked && !isTimeoutExpired) {
+                    tvGpsStatus.setText(String.format("Accuracy: %.1fm, waiting for better signal...", accuracy));
+                    tvGpsStatus.setTextColor(Color.YELLOW);
+                }
+
                 double filteredLat = latitudeFilter.filter(currentLocation.getLatitude());
                 double filteredLon = longitudeFilter.filter(currentLocation.getLongitude());
                 Location filteredLocation = new Location(currentLocation);
@@ -577,29 +632,24 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
                 if (isCollectingReadings && temporaryReadings.size() < READINGS_TO_COLLECT) {
                     collectReading();
                 }
-                if (!isGpsLocked && currentLocation.getAccuracy() <= MIN_ACCURACY_METERS &&
-                        currentLocation.getSpeed() <= MAX_SPEED_MPS && satelliteCount >= MIN_SATELLITES) {
+
+                boolean meetsAccuracy = accuracy <= ACCURACY_THRESHOLD_METERS;
+                boolean meetsSatellites = satelliteCount >= MIN_SATELLITES;
+
+                if (!isGpsLocked && (meetsAccuracy || meetsSatellites)) {
                     stableReadingsCount++;
                     progressGps.setProgress((stableReadingsCount * 100) / STABLE_READINGS_REQUIRED);
                     if (stableReadingsCount >= STABLE_READINGS_REQUIRED) {
-                        isGpsLocked = true;
-                        if (currentMode == PlacementMode.GPS || currentMode == PlacementMode.WALKING) {
-                            btnAddPoint.setEnabled(true);
-                        }
-                        createMeasureMarker(filteredLocation);
-                        tvGpsStatus.setText("GPS LOCKED ✓");
-                        tvGpsStatus.setTextColor(Color.GREEN);
-                        progressGps.setProgress(100);
+                        lockGps(filteredLocation);
                     } else {
-                        tvGpsStatus.setText(String.format("Locking... %d/%d", stableReadingsCount, STABLE_READINGS_REQUIRED));
+                        tvGpsStatus.setText(String.format("Locking... %d/%d (%.1fm)", stableReadingsCount, STABLE_READINGS_REQUIRED, accuracy));
                         tvGpsStatus.setTextColor(Color.YELLOW);
                     }
-                } else if (!isGpsLocked) {
+                } else if (!isGpsLocked && !isTimeoutExpired) {
                     stableReadingsCount = 0;
                     progressGps.setProgress(0);
-                    tvGpsStatus.setText("Waiting for stable signal...");
-                    tvGpsStatus.setTextColor(Color.RED);
                 }
+
                 if (isGpsLocked && !isManualLock && measureMarker != null) {
                     LatLng newPos = new LatLng(filteredLocation.getLatitude(), filteredLocation.getLongitude());
                     measureMarker.setPosition(newPos);
@@ -648,7 +698,7 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
     }
 
     private void addManualPoint(LatLng position) {
-        points.add(position);
+        points.add(new MeasuredPoint(position.latitude, position.longitude, false));
         map.addMarker(new MarkerOptions()
                         .position(position)
                         .title("Point " + points.size())
@@ -663,7 +713,7 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
 
     private void collectReading() {
         if (!isCollectingReadings) return;
-        if (currentLocation != null && currentLocation.getAccuracy() <= MIN_ACCURACY_METERS) {
+        if (currentLocation != null && currentLocation.getAccuracy() <= ACCURACY_THRESHOLD_METERS) {
             double filteredLat = latitudeFilter.filter(currentLocation.getLatitude());
             double filteredLon = longitudeFilter.filter(currentLocation.getLongitude());
             temporaryReadings.add(new LatLng(filteredLat, filteredLon));
@@ -694,15 +744,20 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
         }
         avgLat /= temporaryReadings.size();
         avgLon /= temporaryReadings.size();
-        LatLng averagedPoint = new LatLng(avgLat, avgLon);
+        
+        boolean isLowConfidence = currentLocation != null && currentLocation.getAccuracy() > HIGH_ACCURACY_THRESHOLD_METERS;
+        MeasuredPoint averagedPoint = new MeasuredPoint(avgLat, avgLon, isLowConfidence);
         points.add(averagedPoint);
-        double stdDev = calculateStdDev(temporaryReadings, averagedPoint);
+        
+        double stdDev = calculateStdDev(temporaryReadings, averagedPoint.getLatLng());
+        float markerHue = isLowConfidence ? BitmapDescriptorFactory.HUE_YELLOW : BitmapDescriptorFactory.HUE_RED;
+        
         map.addMarker(new MarkerOptions()
-                .position(averagedPoint)
-                .title("Point " + points.size())
-                .snippet(String.format("Accuracy: ±%.2fm", stdDev))
+                .position(averagedPoint.getLatLng())
+                .title("Point " + points.size() + (isLowConfidence ? " (Low Confidence)" : ""))
+                .snippet(String.format("StdDev: ±%.2fm", stdDev))
                 .draggable(false)
-                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)));
+                .icon(BitmapDescriptorFactory.defaultMarker(markerHue)));
         updateMap();
         updateMeasurements();
         isCollectingReadings = false;
@@ -711,36 +766,55 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
         btnAddPoint.setEnabled(true);
         Toast.makeText(this, String.format("Point %d added (±%.2fm)", points.size(), stdDev), Toast.LENGTH_SHORT).show();
     }
+
     private void addPoint() {
         if (currentMode == PlacementMode.MANUAL) {
             Toast.makeText(this, "Tap anywhere on map to manually place a point", Toast.LENGTH_SHORT).show();
             return;
         }
+        if (currentLocation == null) {
+            Toast.makeText(this, "Waiting for GPS location...", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        float accuracy = currentLocation.getAccuracy();
+        boolean isLowConfidence = accuracy > ACCURACY_THRESHOLD_METERS;
+
+        if (isLowConfidence && !isGpsLocked) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Weak GPS Signal")
+                    .setMessage(String.format("GPS signal is weak (accuracy: %.1fm). Add point anyway?", accuracy))
+                    .setPositiveButton("Yes", (dialog, which) -> performAddPoint(true))
+                    .setNegativeButton("No", null)
+                    .show();
+        } else {
+            performAddPoint(isLowConfidence);
+        }
+    }
+
+    private void performAddPoint(boolean isLowConfidence) {
         if (currentMode == PlacementMode.WALKING) {
-            if (currentLocation == null) {
-                Toast.makeText(this, "Waiting for GPS location...", Toast.LENGTH_SHORT).show();
-                return;
-            }
             double filteredLat = latitudeFilter.filter(currentLocation.getLatitude());
             double filteredLon = longitudeFilter.filter(currentLocation.getLongitude());
-            LatLng position = new LatLng(filteredLat, filteredLon);
+            MeasuredPoint position = new MeasuredPoint(filteredLat, filteredLon, isLowConfidence);
             points.add(position);
+            
+            float markerHue = isLowConfidence ? BitmapDescriptorFactory.HUE_YELLOW : BitmapDescriptorFactory.HUE_ORANGE;
+            
             map.addMarker(new MarkerOptions()
-                    .position(position)
-                    .title("Point " + points.size())
+                    .position(position.getLatLng())
+                    .title("Point " + points.size() + (isLowConfidence ? " (Low Confidence)" : ""))
                     .snippet("Steps: " + stepCount)
                     .draggable(false)
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)));
+                    .icon(BitmapDescriptorFactory.defaultMarker(markerHue)));
             updateMap();
             updateMeasurements();
-            Toast.makeText(this, "Point " + points.size() + " added (Steps: " + stepCount + ")", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Point " + points.size() + " added", Toast.LENGTH_SHORT).show();
             stepCount = 0;
             updateWalkingButtonText();
             return;
         }
-        if (currentLocation != null && currentLocation.getAccuracy() > 5.0f && !isCollectingReadings) {
-            checkAndWarnAccuracy();
-        }
+
         if (!isCollectingReadings) {
             isCollectingReadings = true;
             temporaryReadings.clear();
@@ -752,42 +826,26 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
         }
     }
 
-    private void checkAndWarnAccuracy() {
-        if (currentLocation == null) return;
-        float accuracy = currentLocation.getAccuracy();
-        if (accuracy > 5.0f) {
-            new AlertDialog.Builder(this)
-                    .setTitle("Low GPS Accuracy")
-                    .setMessage(String.format(
-                            "Current GPS accuracy is ±%.1fm. For better results:\n\n" +
-                                    "• Move to open sky area\n" +
-                                    "• Wait for more satellites\n" +
-                                    "• Avoid tall buildings/trees\n" +
-                                    "• Stand still for 30 seconds\n\n" +
-                                    "Continue anyway?", accuracy))
-                    .setPositiveButton("Continue", (dialog, which) -> {})
-                    .setNegativeButton("Wait", (dialog, which) -> {
-                        isCollectingReadings = false;
-                        temporaryReadings.clear();
-                        btnAddPoint.setText("Add Point");
-                    })
-                    .show();
-        }
+    private List<LatLng> getLatLngsFromPoints() {
+        List<LatLng> latLngs = new ArrayList<>();
+        for (MeasuredPoint p : points) latLngs.add(p.getLatLng());
+        return latLngs;
     }
 
     private void updateMap() {
         if (currentPolyline != null) currentPolyline.remove();
         if (currentPolygon != null) currentPolygon.remove();
-        if (points.size() >= 2) {
+        List<LatLng> latLngs = getLatLngsFromPoints();
+        if (latLngs.size() >= 2) {
             currentPolyline = map.addPolyline(new PolylineOptions()
-                    .addAll(points)
+                    .addAll(latLngs)
                     .color(Color.BLUE)
                     .width(5f)
                     .geodesic(true));
         }
-        if (points.size() >= 3) {
+        if (latLngs.size() >= 3) {
             currentPolygon = map.addPolygon(new PolygonOptions()
-                    .addAll(points)
+                    .addAll(latLngs)
                     .fillColor(Color.argb(50, 255, 0, 0))
                     .strokeColor(Color.RED)
                     .strokeWidth(3f)
@@ -801,18 +859,19 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
             tvArea.setText("Area: --");
             return;
         }
+        List<LatLng> latLngs = getLatLngsFromPoints();
         double perimeterMeters = 0;
-        for (int i = 0; i < points.size() - 1; i++) {
-            perimeterMeters += SphericalUtil.computeDistanceBetween(points.get(i), points.get(i + 1));
+        for (int i = 0; i < latLngs.size() - 1; i++) {
+            perimeterMeters += SphericalUtil.computeDistanceBetween(latLngs.get(i), latLngs.get(i + 1));
         }
-        if (points.size() >= 3) {
-            perimeterMeters += SphericalUtil.computeDistanceBetween(points.get(points.size() - 1), points.get(0));
+        if (latLngs.size() >= 3) {
+            perimeterMeters += SphericalUtil.computeDistanceBetween(latLngs.get(latLngs.size() - 1), latLngs.get(0));
         }
         double perimeterConverted = perimeterMeters / selectedUnit.toMeters;
         tvDistance.setText(String.format("Perimeter: %.2f %s", perimeterConverted, selectedUnit.label));
-        if (points.size() >= 3) {
-            List<LatLng> closedPolygonForArea = new ArrayList<>(points);
-            closedPolygonForArea.add(points.get(0));
+        if (latLngs.size() >= 3) {
+            List<LatLng> closedPolygonForArea = new ArrayList<>(latLngs);
+            closedPolygonForArea.add(latLngs.get(0));
             double areaMeters = SphericalUtil.computeArea(closedPolygonForArea);
             double areaConverted = areaMeters / (selectedUnit.toMeters * selectedUnit.toMeters);
             if (currentLocation != null) {
@@ -829,12 +888,13 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
     }
 
     private double estimateAreaError(int numPoints, float gpsAccuracy) {
+        List<LatLng> latLngs = getLatLngsFromPoints();
         double perimeterMeters = 0;
-        for (int i = 0; i < points.size() - 1; i++) {
-            perimeterMeters += SphericalUtil.computeDistanceBetween(points.get(i), points.get(i + 1));
+        for (int i = 0; i < latLngs.size() - 1; i++) {
+            perimeterMeters += SphericalUtil.computeDistanceBetween(latLngs.get(i), latLngs.get(i + 1));
         }
-        if (points.size() >= 3) {
-            perimeterMeters += SphericalUtil.computeDistanceBetween(points.get(points.size() - 1), points.get(0));
+        if (latLngs.size() >= 3) {
+            perimeterMeters += SphericalUtil.computeDistanceBetween(latLngs.get(latLngs.size() - 1), latLngs.get(0));
         }
         return perimeterMeters * gpsAccuracy * 1.5;
     }
@@ -851,11 +911,13 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
             createMeasureMarker(filteredLoc);
         }
         for (int i = 0; i < points.size(); i++) {
+            MeasuredPoint p = points.get(i);
+            float hue = p.isLowConfidence() ? BitmapDescriptorFactory.HUE_YELLOW : BitmapDescriptorFactory.HUE_RED;
             map.addMarker(new MarkerOptions()
-                    .position(points.get(i))
-                    .title("Point " + (i + 1))
+                    .position(p.getLatLng())
+                    .title("Point " + (i + 1) + (p.isLowConfidence() ? " (Low Confidence)" : ""))
                     .draggable(false)
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)));
+                    .icon(BitmapDescriptorFactory.defaultMarker(hue)));
         }
         updateMap();
         updateMeasurements();
@@ -872,7 +934,7 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
         temporaryReadings.clear();
         stepCount = 0;
         btnAddPoint.setText("Add Point");
-        btnAddPoint.setEnabled(isGpsLocked && currentMode == PlacementMode.GPS);
+        updateModeUI();
         if (currentLocation != null) {
             Location filteredLoc = new Location(currentLocation);
             filteredLoc.setLatitude(latitudeFilter.filter(currentLocation.getLatitude()));
@@ -902,7 +964,7 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
         builder.setPositiveButton("Save", (dialog, which) -> {
             String name = input.getText().toString().trim();
             if (!name.isEmpty()) {
-                saveProject(name);
+                prepareSaveProject(name);
             } else {
                 Toast.makeText(this, "Name cannot be empty.", Toast.LENGTH_SHORT).show();
             }
@@ -911,20 +973,41 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
         builder.show();
     }
 
-    private void saveProject(String name) {
-        double perimeter = 0;
-        for (int i = 0; i < points.size() - 1; i++) {
-            perimeter += SphericalUtil.computeDistanceBetween(points.get(i), points.get(i + 1));
+    private void prepareSaveProject(String name) {
+        Toast.makeText(this, "Capturing snapshot...", Toast.LENGTH_SHORT).show();
+        map.snapshot(bitmap -> {
+            Bitmap snapshot = drawCoordinatesOnBitmap(bitmap);
+            String snapshotPath = saveSnapshotInternal(snapshot, name);
+            saveProject(name, snapshotPath);
+        });
+    }
+
+    private String saveSnapshotInternal(Bitmap bitmap, String projectName) {
+        String fileName = "snapshot_" + projectName.replaceAll("\\s+", "_") + "_" + System.currentTimeMillis() + ".jpg";
+        try (java.io.FileOutputStream out = openFileOutput(fileName, Context.MODE_PRIVATE)) {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out);
+            return getFileStreamPath(fileName).getAbsolutePath();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
         }
-        perimeter += SphericalUtil.computeDistanceBetween(points.get(points.size() - 1), points.get(0));
+    }
+
+    private void saveProject(String name, String snapshotPath) {
+        List<LatLng> latLngs = getLatLngsFromPoints();
+        double perimeter = 0;
+        for (int i = 0; i < latLngs.size() - 1; i++) {
+            perimeter += SphericalUtil.computeDistanceBetween(latLngs.get(i), latLngs.get(i + 1));
+        }
+        perimeter += SphericalUtil.computeDistanceBetween(latLngs.get(latLngs.size() - 1), latLngs.get(0));
         
-        double area = SphericalUtil.computeArea(points);
+        double area = SphericalUtil.computeArea(latLngs);
         
         // Convert to selected units
         double perimeterConverted = perimeter / selectedUnit.toMeters;
         double areaConverted = area / (selectedUnit.toMeters * selectedUnit.toMeters);
 
-        Project project = new Project(name, new ArrayList<>(points), areaConverted, perimeterConverted, selectedUnit.label, System.currentTimeMillis());
+        Project project = new Project(name, new ArrayList<>(points), areaConverted, perimeterConverted, selectedUnit.label, System.currentTimeMillis(), snapshotPath);
 
         SharedPreferences prefs = getSharedPreferences(SavedProjectsActivity.PREFS_NAME, Context.MODE_PRIVATE);
         String json = prefs.getString(SavedProjectsActivity.PROJECTS_KEY, "[]");
@@ -980,22 +1063,23 @@ public class MapMeasurementActivity extends AppCompatActivity implements OnMapRe
         canvas.drawText("GPS Plot Data", padding, y, textPaint);
         y += 40;
         for (int i = 0; i < points.size(); i++) {
-            LatLng p = points.get(i);
-            canvas.drawText((i + 1) + ": " + String.format("%.6f", p.latitude) + ", " + String.format("%.6f", p.longitude), padding, y, textPaint);
+            MeasuredPoint p = points.get(i);
+            canvas.drawText((i + 1) + ": " + String.format("%.6f", p.getLatLng().latitude) + ", " + String.format("%.6f", p.getLatLng().longitude) + (p.isLowConfidence() ? " (Low)" : ""), padding, y, textPaint);
             y += 35;
         }
         if (points.size() >= 2) {
+            List<LatLng> latLngs = getLatLngsFromPoints();
             double perimeterMeters = 0;
-            for (int i = 0; i < points.size() - 1; i++) {
-                perimeterMeters += SphericalUtil.computeDistanceBetween(points.get(i), points.get(i + 1));
+            for (int i = 0; i < latLngs.size() - 1; i++) {
+                perimeterMeters += SphericalUtil.computeDistanceBetween(latLngs.get(i), latLngs.get(i + 1));
             }
-            if (points.size() >= 3) {
-                perimeterMeters += SphericalUtil.computeDistanceBetween(points.get(points.size() - 1), points.get(0));
+            if (latLngs.size() >= 3) {
+                perimeterMeters += SphericalUtil.computeDistanceBetween(latLngs.get(latLngs.size() - 1), latLngs.get(0));
             }
             canvas.drawText("Perimeter: " + String.format("%.2f", perimeterMeters / selectedUnit.toMeters) + " " + selectedUnit.label, padding, y + 20, textPaint);
         }
         if (points.size() >= 3) {
-            double areaMeters = SphericalUtil.computeArea(points);
+            double areaMeters = SphericalUtil.computeArea(getLatLngsFromPoints());
             canvas.drawText("Area: " + String.format("%.4f", areaMeters / (selectedUnit.toMeters * selectedUnit.toMeters)) + " " + selectedUnit.label + "²", padding, y + 60, textPaint);
         }
         return mutable;
